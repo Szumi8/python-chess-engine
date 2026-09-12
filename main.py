@@ -24,8 +24,6 @@ chessboard= np.array([
 ])
 
 pygame.init()
-#if %2=0 means its black otherwise its white star counting kurwa 2
-
 
 screen = pygame.display.set_mode((800, 800))
 #Creating chess board
@@ -52,6 +50,25 @@ for key, path in png_load.items():
     img = pygame.image.load(path)
     Pieces[key] = pygame.transform.smoothscale(img, (square - 20, square - 20))
 
+def is_in_check(board, color, state):
+    king_pos = None
+    king_value = 6 * color
+    for i in range(8):
+        for j in range(8):
+            if board[i, j] == king_value:
+                king_pos = [i, j]
+                break
+        if king_pos is not None:
+            break
+    for i in range(8):
+        for j in range(8):
+            current_piece = board[i, j]
+            if current_piece!=0 and (current_piece * color<0):
+                enemy_pos = [i,j]
+                can_attack=movesets(current_piece, enemy_pos, king_pos, board, state)
+                if can_attack:
+                    return True
+    return False
 
 #x is piece type and y list piece_clicked meaning starting pos and z is distatination pos
 def movesets(x, y, z, board, state):
@@ -129,7 +146,7 @@ def movesets(x, y, z, board, state):
                     if board[7,5]==0 and board[7,6]==0:
                         return "castle_right"
                 #castle left side
-                if z[0]==7 and z[1]==6 and not state.white_rook_left_moved:
+                if z[0]==7 and z[1]==2 and not state.white_rook_left_moved:
                     if board[7, 1] == 0 and board[7, 2] == 0 and board[7, 3] == 0:
                         return "castle_left"
             #black king
@@ -201,6 +218,7 @@ class GameState:
 state = GameState()
 piece_clicked = None
 running = True
+invalid_king_pos = None
 
 while running:
 
@@ -240,35 +258,61 @@ while running:
                         else:
 
                             if legal:
-                                if piece_type*white_or_black>0:
+                                if piece_type * white_or_black > 0:
 
-                                    chessboard[piece_clicked[0],piece_clicked[1]]=0
-                                    chessboard[pos[0],pos[1]]=piece
+                                    #creating copy of the board 
+                                    temp_board = chessboard.copy()
+                                    
+                                    temp_board[piece_clicked[0], piece_clicked[1]] = 0
+                                    temp_board[pos[0], pos[1]] = piece
+                                    
                                     if legal == "en_passant":
-                                        chessboard[piece_clicked[0], pos[1]] = 0
-                                    elif legal == "castle_right":
-                                        chessboard[pos[0], 5] = chessboard[pos[0], 7] 
-                                        chessboard[pos[0], 7] = 0
-                                    elif legal == "castle_left":
-                                        chessboard[pos[0], 3] = chessboard[pos[0], 0]
-                                        chessboard[pos[0], 0] = 0
-                                    if piece == 6: state.white_king_moved = True
-                                    elif piece == -6: state.black_king_moved = True
-                                    elif piece == 4:
-                                        if piece_clicked[1] == 0: state.white_rook_left_moved = True
-                                        elif piece_clicked[1] == 7: state.white_rook_right_moved = True
-                                    elif piece == -4:
-                                        if piece_clicked[1] == 0: state.black_rook_left_moved = True
-                                        elif piece_clicked[1] == 7: state.black_rook_right_moved = True
+                                        temp_board[piece_clicked[0], pos[1]] = 0
+                                        
+                                    #checking if the move is legal because of the potential king attack
+                                    if not is_in_check(temp_board, white_or_black, state):
+                                        
+                                        #the move is legal procceding as intended
+                                        invalid_king_pos = None #reseting red king square
+                                        chessboard[piece_clicked[0], piece_clicked[1]] = 0
+                                        chessboard[pos[0], pos[1]] = piece
+                                        
+                                        if legal == "en_passant":
+                                            chessboard[piece_clicked[0], pos[1]] = 0
+                                        elif legal == "castle_right":
+                                            chessboard[pos[0], 5] = chessboard[pos[0], 7] 
+                                            chessboard[pos[0], 7] = 0
+                                        elif legal == "castle_left":
+                                            chessboard[pos[0], 3] = chessboard[pos[0], 0]
+                                            chessboard[pos[0], 0] = 0
+                                            
+                                        #Castling info, checking if a crucial piece has moved and blocking potential castling bugs
+                                        if piece == 6: state.white_king_moved = True
+                                        elif piece == -6: state.black_king_moved = True
+                                        elif piece == 4:
+                                            if piece_clicked[1] == 0: state.white_rook_left_moved = True
+                                            elif piece_clicked[1] == 7: state.white_rook_right_moved = True
+                                        elif piece == -4:
+                                            if piece_clicked[1] == 0: state.black_rook_left_moved = True
+                                            elif piece_clicked[1] == 7: state.black_rook_right_moved = True
+                                            
+                                        state.last_move = (piece_clicked, pos)
+                                        piece_clicked = None
+                                        state.moves_done += 1
+                                        
+                                    else:
+                                        #illegal move because the king is not protected
+                                        king_value = 6 * white_or_black
+                                        for r in range(8):
+                                            for c in range(8):
+                                                if chessboard[r, c] == king_value:
+                                                    invalid_king_pos = [r, c]
+                                        piece_clicked = None
                                         
                                         
-                                    last_move=(piece_clicked,pos)
-                                    piece_clicked=None
-                                    state.moves_done+=1
+                                        
                                 else:
-                                    piece_clicked=None
-                            else:
-                                piece_clicked=None
+                                    piece_clicked = None
     #building the chessboard
     for r in range(8):
         y=r*100
@@ -288,16 +332,12 @@ while running:
                 screen.blit(Pieces[chess_piece], (c * square + 10, r * square + 10))
 
     if piece_clicked is not None:
+        pygame.draw.rect(screen,(255, 255, 0), pygame.Rect(piece_clicked[1]*square, piece_clicked[0]*square, square, square), 4)
 
-        pygame.draw.rect(screen,(255, 255, 0), pygame.Rect(pos[1]*square,pos[0]*square,square,square),4)
+    if invalid_king_pos is not None:
+
+        pygame.draw.rect(screen, (201, 57, 30), pygame.Rect(invalid_king_pos[1]*square, invalid_king_pos[0]*square, square, square), 4)
 
     pygame.display.flip()
 
 pygame.quit()
-
-
-
-
-
-
-
