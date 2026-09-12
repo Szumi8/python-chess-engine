@@ -25,7 +25,7 @@ chessboard= np.array([
 
 pygame.init()
 #if %2=0 means its black otherwise its white star counting kurwa 2
-moves_done=2
+
 
 screen = pygame.display.set_mode((800, 800))
 #Creating chess board
@@ -54,7 +54,7 @@ for key, path in png_load.items():
 
 
 #x is piece type and y list piece_clicked meaning starting pos and z is distatination pos
-def movesets(x, y, z, board, last_move=None):
+def movesets(x, y, z, board, state):
 
     diff_vertical = abs(y[0]-z[0]) # subtraction vertical
     diff_horizontal = abs(y[1]-z[1]) # subtraction horizontal
@@ -113,12 +113,37 @@ def movesets(x, y, z, board, last_move=None):
             
     #queen moveset
     elif abs(x) == 5:
-        return movesets(3, y, z, board) or movesets(4, y, z, board)
+        return movesets(3, y, z, board, state) or movesets(4, y, z, board, state)
     
     #king moveset
     elif abs(x) == 6:
+        # 1. normal moves
         if diff_horizontal <= 1 and diff_vertical <= 1:
             return True
+        # 2 Castling
+        if diff_vertical==0 and diff_horizontal==2:
+            #white king
+            if x==6 and y[0]==7 and y[1]==4 and not state.white_king_moved:
+                #castle right side
+                if z[0]==7 and z[1]==6 and not state.white_rook_right_moved:
+                    if board[7,5]==0 and board[7,6]==0:
+                        return "castle_right"
+                #castle left side
+                if z[0]==7 and z[1]==6 and not state.white_rook_left_moved:
+                    if board[7, 1] == 0 and board[7, 2] == 0 and board[7, 3] == 0:
+                        return "castle_left"
+            #black king
+            elif x == -6 and y[0] == 0 and not state.black_king_moved:
+                #short
+                if z[1] == 6 and not state.black_rook_right_moved:
+                    if board[0, 5] == 0 and board[0, 6] == 0:
+                        return "castle_right"
+                #Long
+                elif z[1] == 2 and not state.black_rook_left_moved:
+                    if board[0, 1] == 0 and board[0, 2] == 0 and board[0, 3] == 0:
+                        return "castle_left"
+
+        
 
 
     elif abs(x) == 1:
@@ -144,8 +169,8 @@ def movesets(x, y, z, board, last_move=None):
                 return True
                 
             # 4. en passant
-            elif board[z[0], z[1]] == 0 and last_move is not None:
-                last_start, last_dest = last_move
+            elif board[z[0], z[1]] == 0 and state.last_move is not None:
+                last_start, last_dest = state.last_move
                 enemy_piece = board[last_dest[0], last_dest[1]]
                 
                 # Check if last move was an enemy pawn moving 2 squares
@@ -156,18 +181,33 @@ def movesets(x, y, z, board, last_move=None):
 
     return False
 
-# starting postionion x y
-piece_clicked=None
-last_move = None
+class GameState:
+    def __init__(self):
 
+        self.white_king_moved = False
+        self.black_king_moved = False
+        
+        self.white_rook_left_moved = False
+        self.white_rook_right_moved = False
+        
+        self.black_rook_left_moved = False
+        self.black_rook_right_moved = False
+        
+        self.moves_done = 2
+        self.last_move = None
+
+
+
+state = GameState()
+piece_clicked = None
 running = True
 
 while running:
 
-    if moves_done%2==0:
-        white_or_black=1
+    if state.moves_done % 2 == 0:
+        white_or_black = 1
     else:
-        white_or_black=-1
+        white_or_black = -1
         
     for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -187,7 +227,7 @@ while running:
                         piece_type=chessboard[pos[0],pos[1]]
                         
                 else:
-                    legal = movesets(piece_type, piece_clicked, pos, chessboard, last_move)
+                    legal = movesets(piece_type, piece_clicked, pos, chessboard, state)
                     if pos==piece_clicked:
                         piece_clicked=None
                     else:
@@ -206,9 +246,25 @@ while running:
                                     chessboard[pos[0],pos[1]]=piece
                                     if legal == "en_passant":
                                         chessboard[piece_clicked[0], pos[1]] = 0
+                                    elif legal == "castle_right":
+                                        chessboard[pos[0], 5] = chessboard[pos[0], 7] 
+                                        chessboard[pos[0], 7] = 0
+                                    elif legal == "castle_left":
+                                        chessboard[pos[0], 3] = chessboard[pos[0], 0]
+                                        chessboard[pos[0], 0] = 0
+                                    if piece == 6: state.white_king_moved = True
+                                    elif piece == -6: state.black_king_moved = True
+                                    elif piece == 4:
+                                        if piece_clicked[1] == 0: state.white_rook_left_moved = True
+                                        elif piece_clicked[1] == 7: state.white_rook_right_moved = True
+                                    elif piece == -4:
+                                        if piece_clicked[1] == 0: state.black_rook_left_moved = True
+                                        elif piece_clicked[1] == 7: state.black_rook_right_moved = True
+                                        
+                                        
                                     last_move=(piece_clicked,pos)
                                     piece_clicked=None
-                                    moves_done+=1
+                                    state.moves_done+=1
                                 else:
                                     piece_clicked=None
                             else:
